@@ -152,20 +152,18 @@ bot.on('callback_query', async (query) => {
       exchange
     };
 
-    let price, currency;
+    let price;
     if (exchange === 'nobitex') {
       price = await getNobitexPrice(CRYPTOS[cryptoKey].nobitexSymbol);
-      currency = 'Toman';
     } else {
       price = await getCoingeckoPrice(CRYPTOS[cryptoKey].coingeckoId);
-      currency = 'USD';
     }
 
-    const priceText = price ? `\nCurrent price: ${price.toLocaleString()} ${currency}` : '';
+    const priceText = price ? `\nCurrent price: $${price.toFixed(2)}` : '';
 
     bot.sendMessage(chatId,
       `Selected: ${CRYPTOS[cryptoKey].name} (${cryptoKey})${priceText}\n\n` +
-      `Enter amount in ${currency} to buy:`
+      `Enter amount in USDT to buy:`
     );
     bot.answerCallbackQuery(query.id);
   }
@@ -175,13 +173,11 @@ bot.on('callback_query', async (query) => {
     if (!session || !session.crypto || !session.amount) return;
 
     const exchange = session.exchange || 'coingecko';
-    let price, currency;
+    let price;
     if (exchange === 'nobitex') {
       price = await getNobitexPrice(CRYPTOS[session.crypto].nobitexSymbol);
-      currency = 'Toman';
     } else {
       price = await getCoingeckoPrice(CRYPTOS[session.crypto].coingeckoId);
-      currency = 'USD';
     }
 
     if (!price) {
@@ -195,8 +191,9 @@ bot.on('callback_query', async (query) => {
     bot.sendMessage(chatId,
       `Order Executed!\n\n` +
       `Bought: ${quantity.toFixed(8)} ${session.crypto}\n` +
-      `Spent: ${session.amount.toLocaleString()} ${currency}\n` +
-      `Price: ${price.toLocaleString()} ${currency}\n\n` +
+      `Spent: $${session.amount} USDT\n` +
+      `Exchange: ${exchange === 'nobitex' ? 'Nobitex' : 'CoinGecko'}\n` +
+      `Price: $${price.toFixed(2)}\n\n` +
       `(Demo mode - no real transaction)`
     );
 
