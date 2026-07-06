@@ -26,10 +26,7 @@ async function getCoingeckoPrice(cryptoId) {
 
 async function getNobitexPrice(nobitexSymbol) {
   try {
-    const res = await axios.post("https://api.nobitex.ir/market/stats", {
-    srcCurrency: nobitexSymbol,
-    dstCurrency: "rls"
-    });
+    const res = await axios.get(`https://api.nobitex.ir/v3/orderbook/${symbol}`);
     const stats = res.data.stats[`${nobitexSymbol}-rls`];
     if (!stats || !stats.latest) return null;
     return parseInt(stats.latest) / 10; // Rial to Toman
