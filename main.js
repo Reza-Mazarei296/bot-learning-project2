@@ -225,13 +225,10 @@ bot.on('message', (msg) => {
   session.amount = amount;
   session.step = 'confirm';
 
-  const exchange = session.exchange || 'coingecko';
-  const currency = exchange === 'nobitex' ? 'Toman' : 'USD';
-
   bot.sendMessage(chatId,
     `Order Summary:\n\n` +
     `Cryptocurrency: ${CRYPTOS[session.crypto].name} (${session.crypto})\n` +
-    `Amount: ${amount.toLocaleString()} ${currency}\n\n` +
+    `Amount: $${amount} USDT\n\n` +
     `Confirm your order:`,
     {
       reply_markup: {
