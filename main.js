@@ -8,17 +8,17 @@ const bot = new TelegramBot(token, { polling: true });
 const userSessions = {};
 
 const CRYPTOS = {
-  BTC: { name: 'Bitcoin', symbol: 'BTCUSDT' },
-  ETH: { name: 'Ethereum', symbol: 'ETHUSDT' },
-  BNB: { name: 'BNB', symbol: 'BNBUSDT' },
-  SOL: { name: 'Solana', symbol: 'SOLUSDT' },
-  XRP: { name: 'Ripple', symbol: 'XRPUSDT' },
+  BTC: { name: 'Bitcoin', id: 'bitcoin' },
+  ETH: { name: 'Ethereum', id: 'ethereum' },
+  BNB: { name: 'BNB', id: 'binancecoin' },
+  SOL: { name: 'Solana', id: 'solana' },
+  XRP: { name: 'Ripple', id: 'ripple' },
 };
 
-async function getPrice(symbol) {
+async function getPrice(cryptoId) {
   try {
-    const res = await axios.get(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`);
-    return parseFloat(res.data.price);
+    const res = await axios.get(`https://api.coingecko.com/api/v3/simple/price?ids=${cryptoId}&vs_currencies=usd`);
+    return res.data[cryptoId]?.usd ?? null;
   } catch {
     return null;
   }
@@ -80,7 +80,7 @@ bot.on('callback_query', async (query) => {
 
   if (data.startsWith('price_')) {
     const cryptoKey = data.replace('price_', '');
-    const price = await getPrice(CRYPTOS[cryptoKey].symbol);
+    const price = await getPrice(CRYPTOS[cryptoKey].id);
 
     const text = price
       ? `${CRYPTOS[cryptoKey].name} (${cryptoKey}): $${price.toFixed(2)}`
@@ -97,7 +97,7 @@ bot.on('callback_query', async (query) => {
       crypto: cryptoKey
     };
 
-    const price = await getPrice(CRYPTOS[cryptoKey].symbol);
+    const price = await getPrice(CRYPTOS[cryptoKey].id);
     const priceText = price ? `\nCurrent price: $${price.toFixed(2)}` : '';
 
     bot.sendMessage(chatId,
@@ -111,7 +111,7 @@ bot.on('callback_query', async (query) => {
     const session = userSessions[chatId];
     if (!session || !session.crypto || !session.amount) return;
 
-    const price = await getPrice(CRYPTOS[session.crypto].symbol);
+    const price = await getPrice(CRYPTOS[session.crypto].id);
     if (!price) {
       bot.sendMessage(chatId, 'Error fetching price. Please try again.');
       bot.answerCallbackQuery(query.id);
