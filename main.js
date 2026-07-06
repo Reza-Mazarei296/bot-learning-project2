@@ -47,18 +47,17 @@ bot.onText(/\/help/, (msg) => {
   );
 });
 
-bot.onText(/\/price/, async (msg) => {
+bot.onText(/\/price/, (msg) => {
   const chatId = msg.chat.id;
-  let text = 'Current Prices:\n\n';
 
-  for (const [key, crypto] of Object.entries(CRYPTOS)) {
-    const price = await getPrice(crypto.symbol);
-    if (price) {
-      text += `${key}: $${price.toFixed(2)}\n`;
-    }
-  }
+  const keyboard = Object.keys(CRYPTOS).map(key => ([{
+    text: `${CRYPTOS[key].name} (${key})`,
+    callback_data: `price_${key}`
+  }]));
 
-  bot.sendMessage(chatId, text);
+  bot.sendMessage(chatId, 'Select a cryptocurrency to check the price:', {
+    reply_markup: { inline_keyboard: keyboard }
+  });
 });
 
 bot.onText(/\/buy/, (msg) => {
@@ -78,6 +77,18 @@ bot.onText(/\/buy/, (msg) => {
 bot.on('callback_query', async (query) => {
   const chatId = query.message.chat.id;
   const data = query.data;
+
+  if (data.startsWith('price_')) {
+    const cryptoKey = data.replace('price_', '');
+    const price = await getPrice(CRYPTOS[cryptoKey].symbol);
+
+    const text = price
+      ? `${CRYPTOS[cryptoKey].name} (${cryptoKey}): $${price.toFixed(2)}`
+      : `Error fetching price for ${CRYPTOS[cryptoKey].name}. Please try again.`;
+
+    bot.sendMessage(chatId, text);
+    bot.answerCallbackQuery(query.id);
+  }
 
   if (data.startsWith('crypto_')) {
     const cryptoKey = data.replace('crypto_', '');
