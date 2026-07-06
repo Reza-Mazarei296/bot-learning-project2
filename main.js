@@ -8,17 +8,28 @@ const bot = new TelegramBot(token, { polling: true });
 const userSessions = {};
 
 const CRYPTOS = {
-  BTC: { name: 'Bitcoin', id: 'bitcoin' },
-  ETH: { name: 'Ethereum', id: 'ethereum' },
-  BNB: { name: 'BNB', id: 'binancecoin' },
-  SOL: { name: 'Solana', id: 'solana' },
-  XRP: { name: 'Ripple', id: 'ripple' },
+  BTC: { name: 'Bitcoin', coingeckoId: 'bitcoin', nobitexSymbol: 'btc' },
+  ETH: { name: 'Ethereum', coingeckoId: 'ethereum', nobitexSymbol: 'eth' },
+  BNB: { name: 'BNB', coingeckoId: 'binancecoin', nobitexSymbol: 'bnb' },
+  SOL: { name: 'Solana', coingeckoId: 'solana', nobitexSymbol: 'sol' },
+  XRP: { name: 'Ripple', coingeckoId: 'ripple', nobitexSymbol: 'xrp' },
 };
 
-async function getPrice(cryptoId) {
+async function getCoingeckoPrice(cryptoId) {
   try {
     const res = await axios.get(`https://api.coingecko.com/api/v3/simple/price?ids=${cryptoId}&vs_currencies=usd`);
     return res.data[cryptoId]?.usd ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function getNobitexPrice(nobitexSymbol) {
+  try {
+    const res = await axios.get(`https://api.nobitex.ir/market/stats?srcCurrency=${nobitexSymbol}&dstCurrency=rls`);
+    const stats = res.data.stats[`${nobitexSymbol}-rls`];
+    if (!stats || !stats.latest) return null;
+    return parseInt(stats.latest) / 10; // Rial to Toman
   } catch {
     return null;
   }
@@ -50,13 +61,13 @@ bot.onText(/\/help/, (msg) => {
 bot.onText(/\/price/, (msg) => {
   const chatId = msg.chat.id;
 
-  const keyboard = Object.keys(CRYPTOS).map(key => ([{
-    text: `${CRYPTOS[key].name} (${key})`,
-    callback_data: `price_${key}`
-  }]));
-
-  bot.sendMessage(chatId, 'Select a cryptocurrency to check the price:', {
-    reply_markup: { inline_keyboard: keyboard }
+  bot.sendMessage(chatId, 'Select an exchange:', {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: 'CoinGecko (USD)', callback_data: 'exchange_coingecko' }],
+        [{ text: 'Nobitex (Toman)', callback_data: 'exchange_nobitex' }]
+      ]
+    }
   });
 });
 
@@ -78,12 +89,38 @@ bot.on('callback_query', async (query) => {
   const chatId = query.message.chat.id;
   const data = query.data;
 
+  if (data.startsWith('exchange_')) {
+    const exchange = data.replace('exchange_', '');
+    userSessions[chatId] = { step: 'select_price_crypto', exchange };
+
+    const keyboard = Object.keys(CRYPTOS).map(key => ([{
+      text: `${CRYPTOS[key].name} (${key})`,
+      callback_data: `price_${key}`
+    }]));
+
+    const label = exchange === 'coingecko' ? 'CoinGecko (USD)' : 'Nobitex (Toman)';
+    bot.sendMessage(chatId, `Select a cryptocurrency (${label}):`, {
+      reply_markup: { inline_keyboard: keyboard }
+    });
+    bot.answerCallbackQuery(query.id);
+  }
+
   if (data.startsWith('price_')) {
     const cryptoKey = data.replace('price_', '');
-    const price = await getPrice(CRYPTOS[cryptoKey].id);
+    const session = userSessions[chatId];
+    const exchange = session?.exchange || 'coingecko';
+
+    let price, currency;
+    if (exchange === 'nobitex') {
+      price = await getNobitexPrice(CRYPTOS[cryptoKey].nobitexSymbol);
+      currency = 'Toman';
+    } else {
+      price = await getCoingeckoPrice(CRYPTOS[cryptoKey].coingeckoId);
+      currency = 'USD';
+    }
 
     const text = price
-      ? `${CRYPTOS[cryptoKey].name} (${cryptoKey}): $${price.toFixed(2)}`
+      ? `${CRYPTOS[cryptoKey].name} (${cryptoKey}): ${price.toLocaleString()} ${currency}`
       : `Error fetching price for ${CRYPTOS[cryptoKey].name}. Please try again.`;
 
     bot.sendMessage(chatId, text);
@@ -97,7 +134,7 @@ bot.on('callback_query', async (query) => {
       crypto: cryptoKey
     };
 
-    const price = await getPrice(CRYPTOS[cryptoKey].id);
+    const price = await getCoingeckoPrice(CRYPTOS[cryptoKey].coingeckoId);
     const priceText = price ? `\nCurrent price: $${price.toFixed(2)}` : '';
 
     bot.sendMessage(chatId,
@@ -111,7 +148,7 @@ bot.on('callback_query', async (query) => {
     const session = userSessions[chatId];
     if (!session || !session.crypto || !session.amount) return;
 
-    const price = await getPrice(CRYPTOS[session.crypto].id);
+    const price = await getCoingeckoPrice(CRYPTOS[session.crypto].coingeckoId);
     if (!price) {
       bot.sendMessage(chatId, 'Error fetching price. Please try again.');
       bot.answerCallbackQuery(query.id);
