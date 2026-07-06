@@ -73,15 +73,14 @@ bot.onText(/\/price/, (msg) => {
 
 bot.onText(/\/buy/, (msg) => {
   const chatId = msg.chat.id;
-  userSessions[chatId] = { step: 'select_crypto' };
 
-  const keyboard = Object.keys(CRYPTOS).map(key => ([{
-    text: `${CRYPTOS[key].name} (${key})`,
-    callback_data: `crypto_${key}`
-  }]));
-
-  bot.sendMessage(chatId, 'Select cryptocurrency to buy:', {
-    reply_markup: { inline_keyboard: keyboard }
+  bot.sendMessage(chatId, 'Select an exchange to buy from:', {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: 'CoinGecko (USD)', callback_data: 'buy_exchange_coingecko' }],
+        [{ text: 'Nobitex (Toman)', callback_data: 'buy_exchange_nobitex' }]
+      ]
+    }
   });
 });
 
@@ -127,19 +126,46 @@ bot.on('callback_query', async (query) => {
     bot.answerCallbackQuery(query.id);
   }
 
+  if (data.startsWith('buy_exchange_')) {
+    const exchange = data.replace('buy_exchange_', '');
+    userSessions[chatId] = { step: 'select_crypto', exchange };
+
+    const keyboard = Object.keys(CRYPTOS).map(key => ([{
+      text: `${CRYPTOS[key].name} (${key})`,
+      callback_data: `crypto_${key}`
+    }]));
+
+    const label = exchange === 'coingecko' ? 'CoinGecko (USD)' : 'Nobitex (Toman)';
+    bot.sendMessage(chatId, `Select cryptocurrency to buy (${label}):`, {
+      reply_markup: { inline_keyboard: keyboard }
+    });
+    bot.answerCallbackQuery(query.id);
+  }
+
   if (data.startsWith('crypto_')) {
     const cryptoKey = data.replace('crypto_', '');
+    const session = userSessions[chatId] || {};
+    const exchange = session.exchange || 'coingecko';
     userSessions[chatId] = {
       step: 'enter_amount',
-      crypto: cryptoKey
+      crypto: cryptoKey,
+      exchange
     };
 
-    const price = await getCoingeckoPrice(CRYPTOS[cryptoKey].coingeckoId);
-    const priceText = price ? `\nCurrent price: $${price.toFixed(2)}` : '';
+    let price, currency;
+    if (exchange === 'nobitex') {
+      price = await getNobitexPrice(CRYPTOS[cryptoKey].nobitexSymbol);
+      currency = 'Toman';
+    } else {
+      price = await getCoingeckoPrice(CRYPTOS[cryptoKey].coingeckoId);
+      currency = 'USD';
+    }
+
+    const priceText = price ? `\nCurrent price: ${price.toLocaleString()} ${currency}` : '';
 
     bot.sendMessage(chatId,
       `Selected: ${CRYPTOS[cryptoKey].name} (${cryptoKey})${priceText}\n\n` +
-      `Enter amount in USDT to buy:`
+      `Enter amount in ${currency} to buy:`
     );
     bot.answerCallbackQuery(query.id);
   }
@@ -148,7 +174,16 @@ bot.on('callback_query', async (query) => {
     const session = userSessions[chatId];
     if (!session || !session.crypto || !session.amount) return;
 
-    const price = await getCoingeckoPrice(CRYPTOS[session.crypto].coingeckoId);
+    const exchange = session.exchange || 'coingecko';
+    let price, currency;
+    if (exchange === 'nobitex') {
+      price = await getNobitexPrice(CRYPTOS[session.crypto].nobitexSymbol);
+      currency = 'Toman';
+    } else {
+      price = await getCoingeckoPrice(CRYPTOS[session.crypto].coingeckoId);
+      currency = 'USD';
+    }
+
     if (!price) {
       bot.sendMessage(chatId, 'Error fetching price. Please try again.');
       bot.answerCallbackQuery(query.id);
@@ -160,8 +195,8 @@ bot.on('callback_query', async (query) => {
     bot.sendMessage(chatId,
       `Order Executed!\n\n` +
       `Bought: ${quantity.toFixed(8)} ${session.crypto}\n` +
-      `Spent: $${session.amount} USDT\n` +
-      `Price: $${price.toFixed(2)}\n\n` +
+      `Spent: ${session.amount.toLocaleString()} ${currency}\n` +
+      `Price: ${price.toLocaleString()} ${currency}\n\n` +
       `(Demo mode - no real transaction)`
     );
 
@@ -193,10 +228,13 @@ bot.on('message', (msg) => {
   session.amount = amount;
   session.step = 'confirm';
 
+  const exchange = session.exchange || 'coingecko';
+  const currency = exchange === 'nobitex' ? 'Toman' : 'USD';
+
   bot.sendMessage(chatId,
     `Order Summary:\n\n` +
     `Cryptocurrency: ${CRYPTOS[session.crypto].name} (${session.crypto})\n` +
-    `Amount: $${amount} USDT\n\n` +
+    `Amount: ${amount.toLocaleString()} ${currency}\n\n` +
     `Confirm your order:`,
     {
       reply_markup: {
