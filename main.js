@@ -151,20 +151,25 @@ bot.on('callback_query', async (query) => {
       exchange
     };
 
-    let price, currency;
+    let price, currency, currencySymbol;
     if (exchange === 'nobitex') {
       price = await getNobitexPrice(CRYPTOS[cryptoKey].nobitexSymbol);
       currency = 'Toman';
+      currencySymbol = '';
     } else {
       price = await getCoingeckoPrice(CRYPTOS[cryptoKey].coingeckoId);
       currency = 'USD';
+      currencySymbol = '$';
     }
 
-    const priceText = price ? `\nCurrent price: ${price.toLocaleString()} ${currency}` : '';
+    userSessions[chatId].currency = currency;
+    userSessions[chatId].currencySymbol = currencySymbol;
+
+    const priceText = price ? `\nCurrent price: ${currencySymbol}${price.toLocaleString()} ${currency}` : '';
 
     bot.sendMessage(chatId,
       `Selected: ${CRYPTOS[cryptoKey].name} (${cryptoKey})${priceText}\n\n` +
-      `Enter amount in USDT to buy:`
+      `Enter amount in ${currency} to buy:`
     );
     bot.answerCallbackQuery(query.id);
   }
@@ -190,11 +195,12 @@ bot.on('callback_query', async (query) => {
     }
 
     const quantity = session.amount / price;
+    const currencySymbol = session.currencySymbol || '$';
 
     bot.sendMessage(chatId,
       `Order Executed!\n\n` +
       `Bought: ${quantity.toFixed(8)} ${session.crypto}\n` +
-      `Spent: $${session.amount} USDT\n` +
+      `Spent: ${currencySymbol}${session.amount.toLocaleString()} ${currency}\n` +
       `Exchange: ${exchange === 'nobitex' ? 'Nobitex' : 'CoinGecko'}\n` +
       `Price: ${price.toLocaleString()} ${currency}\n\n` +
       `(Demo mode - no real transaction)`
@@ -228,10 +234,13 @@ bot.on('message', (msg) => {
   session.amount = amount;
   session.step = 'confirm';
 
+  const currencySymbol = session.currencySymbol || '$';
+  const currency = session.currency || 'USD';
+
   bot.sendMessage(chatId,
     `Order Summary:\n\n` +
     `Cryptocurrency: ${CRYPTOS[session.crypto].name} (${session.crypto})\n` +
-    `Amount: $${amount} USDT\n\n` +
+    `Amount: ${currencySymbol}${amount.toLocaleString()} ${currency}\n\n` +
     `Confirm your order:`,
     {
       reply_markup: {
